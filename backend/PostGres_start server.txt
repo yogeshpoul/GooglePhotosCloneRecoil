@@ -1,0 +1,72 @@
+C:\Users\yoges>pg_ctl -D "C:\Program Files\PostgreSQL\16\data" start
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start....2024-05-13 20:54:05.850 IST [8520] LOG:  redirecting log output to logging collector process
+2024-05-13 20:54:05.850 IST [8520] HINT:  Future log output will appear in directory "log".
+ stopped waiting
+pg_ctl: could not start server
+Examine the log output.
+
+C:\Users\yoges>pg_ctl -D "C:\Program Files\PostgreSQL\16\data" start
+waiting for server to start....2024-05-13 20:54:52.676 IST [10816] LOG:  redirecting log output to logging collector process
+2024-05-13 20:54:52.676 IST [10816] HINT:  Future log output will appear in directory "log".
+ done
+server started
+
+C:\Users\yoges>psql -U postgres postgres
+Password for user postgres: postgres
+psql (16.2)
+WARNING: Console code page (437) differs from Windows code page (1252)
+         8-bit characters might not work correctly. See psql reference
+         page "Notes for Windows users" for details.
+Type "help" for help.
+
+postgres=# \list
+                                                                          List of databases
+       Name       |  Owner   | Encoding | Locale Provider |          Collate           |           Ctype            | ICU Locale | ICU Rules |   Access privileges
+------------------+----------+----------+-----------------+----------------------------+----------------------------+------------+-----------+-----------------------
+ api              | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           |
+ creatorships_db  | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           |
+ myapp_production | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           |
+ otp              | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           |
+ postgres         | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           |
+ template0        | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           | =c/postgres          +
+                  |          |          |                 |                            |                            |            |           | postgres=CTc/postgres
+ template1        | postgres | UTF8     | libc            | English_United States.1252 | English_United States.1252 |            |           | =c/postgres          +
+                  |          |          |                 |                            |                            |            |           | postgres=CTc/postgres
+(7 rows)
+
+
+postgres=# \c otp
+You are now connected to database "otp" as user "postgres".
+otp=# \d
+              List of relations
+ Schema |     Name      |   Type   |  Owner
+--------+---------------+----------+----------
+ public | SequelizeMeta | table    | postgres
+ public | Users         | table    | postgres
+ public | Users_id_seq  | sequence | postgres
+(3 rows)
+
+
+otp=# select * from Users;
+ERROR:  relation "users" does not exist
+LINE 1: select * from Users;
+                      ^
+otp=# select * from "Users";
+ id |  username  |          email           |  password  | otp_code |        otp_expiration         | is_verified |           createdAt           |           updatedAt
+----+------------+--------------------------+------------+----------+-------------------------------+-------------+-------------------------------+-------------------------------
+  1 | yogesh     | yogeshpoul@gmail.com     | user12345  |          |                               | f           | 2024-07-16 23:29:38.365+05:30 | 2024-07-16 23:29:38.365+05:30
+  2 | yogesh     | yogeshpoul9999@gmail.com | user12345  | 253201   | 2024-07-16 23:57:36.479+05:30 | f           | 2024-07-16 23:35:41.914+05:30 | 2024-07-16 23:47:36.524+05:30
+  3 | yogesh     | yogeshpoul9@gmail.com    | user12345  | 814082   | 2024-07-17 09:42:07.977+05:30 | t           | 2024-07-16 23:55:00.815+05:30 | 2024-07-17 09:39:24.128+05:30
+  4 | yogesh     | yogeshpoul9@gmail.com    | user12345  | 814082   | 2024-07-17 09:42:07.977+05:30 | t           | 2024-07-17 00:01:55.98+05:30  | 2024-07-17 09:39:24.128+05:30
+ 37 | yogesh     | yogeshpoul9@gmail.com    | user12345  | 814082   | 2024-07-17 09:42:07.977+05:30 | t           | 2024-07-17 09:16:29.437+05:30 | 2024-07-17 09:39:24.128+05:30
+ 38 | yogeshpoul | yogeshpoul9@gmail.com    | user123456 | 814082   | 2024-07-17 09:42:07.977+05:30 | t           | 2024-07-17 09:21:33.453+05:30 | 2024-07-17 09:39:24.128+05:30
+ 71 | yogeshpoul | yogeshpoul9@gmail.com    | user123456 | 814082   | 2024-07-17 09:42:07.977+05:30 | t           | 2024-07-17 09:30:57.595+05:30 | 2024-07-17 09:39:24.128+05:30
+ 72 | yogeshpoul | yogeshpoul9@gmail.com    | user123456 |          |                               | t           | 2024-07-17 09:33:16.891+05:30 | 2024-07-17 09:39:24.128+05:30
+ 73 | yogeshpoul | yogeshpoul9@gmail.com    | user123456 |          |                               | t           | 2024-07-17 09:35:46.776+05:30 | 2024-07-17 09:39:24.128+05:30
+ 74 | yogeshpoul | yogeshpoul9@gmail.com    | user123456 | 553509   |                               | t           | 2024-07-17 09:37:26.44+05:30  | 2024-07-17 09:39:24.128+05:30
+ 75 | yogeshpoul | yogeshpoul9@gmail.com    | user123456 | 278700   | 2024-07-17 09:49:10.031+05:30 | t           | 2024-07-17 09:39:10.045+05:30 | 2024-07-17 09:39:24.128+05:30
+(11 rows)
+
+
+otp=#

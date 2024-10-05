@@ -1,0 +1,465 @@
+import React from 'react';
+import Navbar from '../components/Navbar';
+import ImageGallery from '../components/ImageGallery';
+
+export const Dashboard = () => {
+    return (
+        <div className="min-h-screen bg-gray-900 text-white">
+            <Navbar/>
+            <ImageGallery/>
+        </div>
+    );
+};
+import React, { useState, useEffect } from 'react';
+import { jwtDecode } from "jwt-decode";
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { API_URL } from '../config';
+import { useSetRecoilState } from 'recoil';
+import { imagesUpdatedState } from '../atoms/state';
+
+const Navbar = () => {
+    const [name, setName] = useState("Y");
+    const [showLogout, setShowLogout] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadMessage, setUploadMessage] = useState('');
+    const setImagesUpdated = useSetRecoilState(imagesUpdatedState);
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        const decodedToken = jwtDecode(token);
+        setName(decodedToken.userId[0]);
+    }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        navigate("/");
+    };
+
+    const toggleLogout = () => {
+        setShowLogout(!showLogout);
+    };
+
+    const handleFileChange = (event) => {
+        uploadFile(event.target.files[0], event.target.files[0].name);
+        event.target.value = null; // Clear the file input
+    };
+
+    const uploadFile = async (file, imageName) => {
+        setUploading(true);
+        setUploadProgress(0);
+        setUploadMessage('Uploading...');
+
+        try {
+            const signedUrl = await axios.post(`${API_URL}/api/v1/upload-photo`, {
+                type: file.type,
+                imageName
+            }, {
+                headers: {
+                    Authorization: localStorage.getItem('token')
+                }
+            });
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', signedUrl.data.url);
+
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 100);
+                    setUploadProgress(percentComplete);
+                }
+            };
+
+            xhr.onload = async () => {
+                if (xhr.status === 200) {
+                    await axios.post(`${API_URL}/api/v1/saveImageDb`, {
+                        imageName,
+                        photoKey: signedUrl.data.photoKey
+                    }, {
+                        headers: {
+                            Authorization: localStorage.getItem('token')
+                        }
+                    });
+                    setUploadMessage('Upload complete!');
+                    setTimeout(() => {
+                        setUploading(false);
+                        setUploadProgress(0);
+                        setUploadMessage('');
+                    }, 2000);
+
+                    setImagesUpdated(prev => !prev); // Notify Dashboard to refresh images
+                } else {
+                    setUploadMessage('Upload failed.');
+                }
+            };
+
+            xhr.onerror = () => {
+                setUploadMessage('Upload failed.');
+            };
+
+            xhr.send(file);
+
+        } catch (error) {
+            console.error('Error uploading file:', error);
+            setUploadMessage('Failed to upload file.');
+            setUploading(false);
+        }
+    };
+
+    return (
+        <nav className="flex items-center justify-between p-4 shadow-lg bg-gray-800">
+            <div className="flex items-center space-x-2">
+                <label htmlFor="file-input" className="flex items-center space-x-2 text-lg font-bold text-white cursor-pointer">
+                    <svg 
+                        width="24" 
+                        height="24" 
+                        viewBox="0 0 24 24" 
+                        fill="currentColor"
+                    >
+                        <path d="M4 15h2v3h12v-3h2v3c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2m4.41-7.59L11 7.83V16h2V7.83l2.59 2.59L17 9l-5-5-5 5 1.41 1.41z"></path>
+                    </svg>
+                    <span>Upload</span>
+                </label>
+                <input 
+                    type="file" 
+                    id="file-input" 
+                    style={{ display: 'none' }} 
+                    onChange={handleFileChange} 
+                    title="Select a file to upload"
+                    aria-label="File input"
+                />
+            </div>
+            {uploading && (
+                <div className="flex items-center space-x-2">
+                    <div className="w-32 h-2 bg-gray-300 rounded">
+                        <div
+                            className="h-2 bg-green-500 rounded"
+                            style={{ width: `${uploadProgress}%` }}
+                        />
+                    </div>
+                    <span className="text-white text-sm">{uploadProgress}%</span>
+                    <span className="text-white text-sm">{uploadMessage}</span>
+                </div>
+            )}
+            <div className="relative">
+                <button 
+                    onClick={toggleLogout} 
+                    className="flex items-center justify-center w-10 h-10 text-lg font-bold uppercase text-white bg-gray-700 rounded-full"
+                >
+                    {name}
+                </button>
+                {showLogout && (
+                    <div className="absolute right-0 bg-white text-black shadow-md rounded-lg">
+                        <button 
+                            onClick={handleLogout} 
+                            className="w-full px-4 py-2 hover:bg-gray-200 rounded-lg"
+                        >
+                            Logout
+                        </button>
+                    </div>
+                )}
+            </div>
+        </nav>
+    );
+};
+
+export default Navbar;
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import Modal from './Modal';
+import { Viewer } from '@react-pdf-viewer/core';
+import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+
+// Import PDF.js worker
+import { GlobalWorkerOptions } from 'pdfjs-dist';
+import { API_URL } from '../config';
+import { imagesUpdatedState } from '../atoms/state';
+import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
+import { selectedMediaState } from '../atoms/ImageGalleryState';
+
+// Set the workerSrc
+GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+const ImageGallery = () => {
+    const [mediaUrls, setMediaUrls] = useState([]);
+    const setSelectedMedia = useSetRecoilState(selectedMediaState)
+    const [error, setError] = useState(null);
+    const defaultLayoutPluginInstance = defaultLayoutPlugin();
+    const imagesUpdated = useRecoilValue(imagesUpdatedState);
+
+    useEffect(() => {
+        const fetchMediaUrls = async () => {
+            try {
+                const response = await axios.get(`${API_URL}/api/v1/getImageURI`, {
+                    headers: {
+                        Authorization: localStorage.getItem('token')
+                    }
+                });
+
+                if (response.status === 200) {
+                    const sortedMedia = (response.data.photoUrls || []).sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+                    setMediaUrls(sortedMedia);
+                    setError(null);
+                }
+            } catch (error) {
+                if (error.response && error.response.status === 404) {
+                    setError('No data uploaded');
+                } else {
+                    setError('Error fetching media URLs');
+                }
+                setMediaUrls([]);
+            }
+        };
+
+        fetchMediaUrls();
+    }, [imagesUpdated]);
+
+    const getThumbnail = (media) => {
+        const extension = media.photoKey.split('.').pop().toLowerCase();
+
+        if (extension === 'mp4') {
+            return (
+                <video className="w-full h-48 object-cover rounded-lg">
+                    <source src={media.imageUrl} type="video/mp4" />
+                </video>
+            );
+        } else if (extension === 'pdf') {
+            return (
+                <div className="w-full h-48 object-cover rounded-lg">
+                    <Viewer fileUrl={media.imageUrl} />
+                </div>
+            );
+        } else {
+            return (
+                <img
+                    src={media.imageUrl}
+                    alt="Image Thumbnail"
+                    className="w-full h-48 object-cover rounded-lg"
+                />
+            );
+        }
+    };
+
+    return (
+        <div className='p-2'>
+            {error ? (
+                <p className="text-red-500">{error}</p>
+            ) : mediaUrls.length === 0 ? (
+                <p>No media available</p>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {mediaUrls.map((media, index) => (
+                        <div key={index} className="relative cursor-pointer" onClick={() => setSelectedMedia(media)}>
+                            {getThumbnail(media)}
+                        </div>
+                    ))}
+                </div>
+            )}
+            <Modal />
+        </div>
+    );
+};
+
+export default ImageGallery;
+import React, { useEffect } from 'react';
+import axios from 'axios';
+import ReactPlayer from 'react-player';
+import { Worker, Viewer } from '@react-pdf-viewer/core';
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import { API_URL } from '../config';
+import { useRecoilState, useSetRecoilState } from 'recoil';
+import { imagesUpdatedState } from '../atoms/state';
+import { selectedMediaState } from '../atoms/ImageGalleryState';
+
+const Modal = () => {
+    const setImagesUpdated = useSetRecoilState(imagesUpdatedState);
+    const [selectedMedia,setSelectedMedia]=useRecoilState(selectedMediaState);
+
+    const fileName = selectedMedia?.photoKey;
+    const extension = fileName?.split('.').pop().toLowerCase();
+
+    useEffect(() => {
+        const handlePopState = () => {
+            setSelectedMedia(null);
+        };
+
+        if (selectedMedia) {
+            window.history.pushState(null, '', window.location.href);
+            window.addEventListener('popstate', handlePopState);
+        }
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [selectedMedia]);
+
+    const handleDelete = async () => {
+        try {
+            const response = await axios.delete(`${API_URL}/api/v1/deleteImage`, {
+                params: { photoKey: selectedMedia.photoKey },
+                headers: {
+                    Authorization: localStorage.getItem('token')
+                }
+            });
+
+            if (response.status === 200) {
+                alert('File deleted successfully!');
+                setSelectedMedia(null);
+                setImagesUpdated(prev => !prev);
+            } else {
+                alert('Failed to delete file.');
+            }
+        } catch (error) {
+            console.error('Error deleting file:', error);
+            alert('Failed to delete file.');
+        }
+    };
+
+    const handleShare = () => {
+        if (navigator.share) {
+            navigator.share({
+                title: 'Check out this media',
+                url: selectedMedia.shareableUrl,
+            }).catch((error) => console.error('Error sharing:', error));
+        } else {
+            alert('Sharing not supported on this browser.');
+        }
+    };
+
+    const renderContent = () => {
+        if (extension === 'mp4') {
+            return (
+                <ReactPlayer
+                    url={selectedMedia.imageUrl}
+                    controls
+                    width="100vw"
+                    height="100vh"
+                    style={{ maxHeight: '100vh', maxWidth: '100vw' }}
+                />
+            );
+        } else if (extension === 'pdf') {
+            return (
+                <div className="w-full h-full">
+                    <Worker workerUrl="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js">
+                        <Viewer fileUrl={selectedMedia.imageUrl} />
+                    </Worker>
+                </div>
+            );
+        } else {
+            return (
+                <img
+                    src={selectedMedia.imageUrl}
+                    alt="Full size"
+                    className="w-full h-full object-contain"
+                    style={{ maxHeight: '100vh', maxWidth: '100vw' }}
+                />
+            );
+        }
+    };
+
+    return (
+        selectedMedia && (
+            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                <div className="relative w-full h-full flex items-center justify-center">
+                    {renderContent()}
+
+                    {/* Buttons container with gradient effect */}
+                    <div
+                        className="absolute top-0 left-0 right-0 p-3 flex justify-between"
+                        style={{
+                            backgroundImage: 'linear-gradient(0deg, transparent, rgba(0, 0, 0, .38))',
+                        }}
+                    >
+                        {/* Back Button */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedMedia(null);
+                            }}
+                            className="text-white rounded-full p-2 flex items-center justify-center"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                            >
+                                <path d="M19 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H19v-2z" />
+                            </svg>
+                        </button>
+
+                        <div className="flex gap-1">
+                            {/* Share Button */}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShare();
+                                }}
+                                className="text-white rounded-full p-2 flex items-center justify-center"
+                            >
+                                <svg width="24px" fill="white" height="24px" viewBox="0 0 24 24"><path d="M18 16c-.79 0-1.5.31-2.03.81L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.53.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.48.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.05 4.12c-.05.22-.09.45-.09.69 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3zm0-12c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM6 13c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm12 7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"></path></svg>
+                            </button>
+
+                            {/* Delete Button */}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete();
+                                }}
+                                className="text-white rounded-full p-2"
+                            >
+                                <svg
+                                    width="24px"
+                                    height="24px"
+                                    viewBox="0 0 24 24"
+                                    fill="currentColor"
+                                >
+                                    <path d="M15 4V3H9v1H4v2h1v13c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V6h1V4h-5zm2 15H7V6h10v13zM9 8h2v9H9zm4 0h2v9h-2z"></path>
+                                </svg>
+                            </button>
+
+                            {/* Download Button */}
+                            <a
+                                href={selectedMedia.imageUrl}
+                                download
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-white rounded-full p-2 flex items-center justify-center"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="24"
+                                    height="24"
+                                    viewBox="0 0 24 24"
+                                    fill="currentColor"
+                                >
+                                    <path d="M5 20h14v-2H5v2zm7-18l-5 5h4v6h2V7h4l-5-5z" />
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    );
+};
+
+export default Modal;
+
+and their state atoms of recoil are
+import { atom } from 'recoil';
+
+export const imagesUpdatedState = atom({
+  key: 'imagesUpdatedState',  // Unique key
+  default: false,             // Initial value
+});
+import { atom } from 'recoil';
+
+export const selectedMediaState = atom({
+  key: 'selectedMediaState',  // Unique key
+  default: null,             // Initial value
+});
